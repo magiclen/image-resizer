@@ -145,6 +145,10 @@ impl Config {
                 .visible_aliases(&["4:2:0"])
                 .help("Uses 4:2:0 (chroma quartered) subsampling to reduce the file size if it is supported.")
             )
+            .arg(Arg::with_name("NO_SHARPEN")
+                .long("no-sharpen")
+                .help("Disables automatically sharpening.")
+            )
             .after_help("Enjoy it! https://magiclen.org")
             .get_matches();
 
@@ -172,7 +176,7 @@ impl Config {
 
         let only_shrink = matches.is_present("ONLY_SHRINK");
 
-        let sharpen = matches.is_present("SHARP");
+        let sharpen = !matches.is_present("NO_SHARP");
 
         let quality = matches.value_of("QUALITY").unwrap().parse::<u8>().map_err(|_| {
             String::from("You need to input a valid quality value for lossy-compressed images.")
