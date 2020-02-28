@@ -64,7 +64,7 @@ impl Config {
         let examples = vec![
             "/path/to/image -m 1920                         # Make /path/to/image resized",
             "/path/to/folder -m 1920                        # Make images inside /path/to/folder and make resized",
-            "/path/to/image -o /path/to/image2 -m 1920     # Make /path/to/image resized, and save it to /path/to/image2",
+            "/path/to/image -o /path/to/image2 -m 1920      # Make /path/to/image resized, and save it to /path/to/image2",
             "/path/to/folder -o /path/to/folder2 -m 1920    # Make images inside /path/to/folder resized, and save them to /path/to/folder2",
             "/path/to/folder -o /path/to/folder2 -f -m 1920 # Make images inside /path/to/folder resized, and save them to /path/to/folder2 without overwriting checks",
             "/path/to/folder --allow-gif -r -m 1920         # Make images inside /path/to/folder including GIF resized and also remain their profiles",
@@ -92,7 +92,7 @@ impl Config {
             )
             .arg(Arg::with_name("INPUT_PATH")
                 .required(true)
-                .help("Assigns an image or a directory for image interlacing. It should be a path of a file or a directory")
+                .help("Assigns an image or a directory for image resizing. It should be a path of a file or a directory")
                 .takes_value(true)
             )
             .arg(Arg::with_name("OUTPUT_PATH")
@@ -127,28 +127,28 @@ impl Config {
                 .short("m")
                 .takes_value(true)
                 .required(true)
-                .help("Sets the maximum pixels of each side of an image. (Aspect ratio will be preserved.)")
+                .help("Sets the maximum pixels of each side of an image (Aspect ratio will be preserved)")
             )
             .arg(Arg::with_name("ONLY_SHRINK")
                 .visible_aliases(&["shrink"])
                 .long("only-shrink")
-                .help("Only shrink images, not enlarge them.")
+                .help("Only shrink images, not enlarge them")
             )
             .arg(Arg::with_name("QUALITY")
                 .long("quality")
                 .short("q")
                 .takes_value(true)
                 .default_value("92")
-                .help("Set the quality for lossy compression.")
+                .help("Sets the quality for lossy compression")
             )
             .arg(Arg::with_name("CHROMA_QUARTERED")
                 .long("chroma-quartered")
                 .visible_aliases(&["4:2:0"])
-                .help("Uses 4:2:0 (chroma quartered) subsampling to reduce the file size if it is supported.")
+                .help("Uses 4:2:0 (chroma quartered) subsampling to reduce the file size if it is supported")
             )
             .arg(Arg::with_name("NO_SHARPEN")
                 .long("no-sharpen")
-                .help("Disables automatically sharpening.")
+                .help("Disables automatically sharpening")
             )
             .after_help("Enjoy it! https://magiclen.org")
             .get_matches();
