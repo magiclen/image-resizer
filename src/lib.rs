@@ -62,15 +62,16 @@ impl Config {
         let arg0 = Path::new(&arg0).file_stem().unwrap().to_str().unwrap();
 
         let examples = vec![
-            "/path/to/image -m 1920                         # Check /path/to/image and make it resized",
-            "/path/to/folder -m 1920                        # Check /path/to/folder and make images inside it resized",
-            "/path/to/image  -o /path/to/image2 -m 1920     # Check /path/to/image and make it resized, and save it to /path/to/image2",
-            "/path/to/folder -o /path/to/folder2 -m 1920    # Check /path/to/folder and make images inside it resized, and save them to /path/to/folder2",
-            "/path/to/folder -o /path/to/folder2 -f -m 1920 # Check /path/to/folder and make images inside it resized, and save them to /path/to/folder2 without overwriting checks",
-            "/path/to/folder --allow-gif -r -m 1920         # Check /path/to/folder and make images inside it including GIF images resized and also remain their profiles",
-            "/path/to/image -m 1920 --shrink                # Check /path/to/image and make it shrunk if it needs to be",
-            "/path/to/image -m 1920 -q 75                   # Check /path/to/image and make it resized with a quality of 75 if it uses lossy compression",
-            "/path/to/image -m 1920 --4:2:0                 # Check /path/to/image and make it resized and output using 4:2:0 (chroma quartered) subsampling to reduce the file size",
+            "/path/to/image -m 1920                         # Make /path/to/image resized",
+            "/path/to/folder -m 1920                        # Make images inside /path/to/folder and make resized",
+            "/path/to/image -o /path/to/image2 -m 1920     # Make /path/to/image resized, and save it to /path/to/image2",
+            "/path/to/folder -o /path/to/folder2 -m 1920    # Make images inside /path/to/folder resized, and save them to /path/to/folder2",
+            "/path/to/folder -o /path/to/folder2 -f -m 1920 # Make images inside /path/to/folder resized, and save them to /path/to/folder2 without overwriting checks",
+            "/path/to/folder --allow-gif -r -m 1920         # Make images inside /path/to/folder including GIF resized and also remain their profiles",
+            "/path/to/image -m 1920 --shrink                # Make /path/to/image shrunk if it needs to be",
+            "/path/to/image -m 1920 -q 75                   # Make /path/to/image resized with a quality of 75 if it uses lossy compression",
+            "/path/to/image -m 1920 --4:2:0                 # Make /path/to/image resized and output using 4:2:0 (chroma quartered) subsampling to reduce the file size",
+            "/path/to/image -m 1920 --no-sharpen            # Make /path/to/image resized without auto sharpening",
         ];
 
         let terminal_width = if let Some((Width(width), _)) = terminal_size() {
