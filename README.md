@@ -19,6 +19,7 @@ EXAMPLES:
   image-resizer /path/to/image -m 1920 -q 75                   # Make /path/to/image resized with a quality of 75 if it uses lossy compression
   image-resizer /path/to/image -m 1920 --4:2:0                 # Make /path/to/image resized and output using 4:2:0 (chroma quartered) subsampling to reduce the file size
   image-resizer /path/to/image -m 1920 --no-sharpen            # Make /path/to/image resized without auto sharpening
+  image-resizer /path/to/image -m 1920 --ppi 150               # Make /path/to/image resized, and set their PPI to 150
 
 USAGE:
     image-resizer [FLAGS] [OPTIONS] <INPUT_PATH> --side-maximum <SIDE_MAXIMUM>

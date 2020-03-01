@@ -23,8 +23,8 @@ use terminal_size::{terminal_size, Width};
 use path_absolutize::*;
 
 use image_convert::{
-    identify, to_gif, to_jpg, to_pgm, to_png, to_webp, GIFConfig, ImageIdentify, ImageResource,
-    JPGConfig, PGMConfig, PNGConfig, WEBPConfig,
+    identify, to_gif, to_jpg, to_pgm, to_png, to_tiff, to_webp, GIFConfig, ImageIdentify,
+    ImageResource, JPGConfig, PGMConfig, PNGConfig, TIFFConfig, WEBPConfig,
 };
 
 use scanner_rust::Scanner;
@@ -53,6 +53,7 @@ pub struct Config {
     pub only_shrink: bool,
     pub sharpen: bool,
     pub quality: u8,
+    pub ppi: Option<f64>,
     pub force_to_chroma_quartered: bool,
 }
 
@@ -72,6 +73,7 @@ impl Config {
             "/path/to/image -m 1920 -q 75                   # Make /path/to/image resized with a quality of 75 if it uses lossy compression",
             "/path/to/image -m 1920 --4:2:0                 # Make /path/to/image resized and output using 4:2:0 (chroma quartered) subsampling to reduce the file size",
             "/path/to/image -m 1920 --no-sharpen            # Make /path/to/image resized without auto sharpening",
+            "/path/to/image -m 1920 --ppi 150               # Make /path/to/image resized, and set their PPI to 150",
         ];
 
         let terminal_width = if let Some((Width(width), _)) = terminal_size() {
@@ -134,6 +136,10 @@ impl Config {
                 .long("only-shrink")
                 .help("Only shrink images, not enlarge them")
             )
+            .arg(Arg::with_name("NO_SHARPEN")
+                .long("no-sharpen")
+                .help("Disables automatically sharpening")
+            )
             .arg(Arg::with_name("QUALITY")
                 .long("quality")
                 .short("q")
@@ -141,14 +147,15 @@ impl Config {
                 .default_value("92")
                 .help("Sets the quality for lossy compression")
             )
+            .arg(Arg::with_name("PPI")
+                .long("ppi")
+                .takes_value(true)
+                .help("Sets pixels per inch (ppi)")
+            )
             .arg(Arg::with_name("CHROMA_QUARTERED")
                 .long("chroma-quartered")
                 .visible_aliases(&["4:2:0"])
                 .help("Uses 4:2:0 (chroma quartered) subsampling to reduce the file size if it is supported")
-            )
-            .arg(Arg::with_name("NO_SHARPEN")
-                .long("no-sharpen")
-                .help("Disables automatically sharpening")
             )
             .after_help("Enjoy it! https://magiclen.org")
             .get_matches();
@@ -187,6 +194,23 @@ impl Config {
             return Err(String::from("The range of quality is from 0 to 100."));
         }
 
+        let ppi = match matches.value_of("PPI") {
+            Some(ppi) => {
+                let ppi = ppi.parse::<f64>().map_err(|_| {
+                    String::from(
+                        "You need to input a valid quality value for pixels per inch (ppi).",
+                    )
+                })?;
+
+                if ppi <= 0f64 {
+                    return Err(String::from("The ppi must be bigger than 0."));
+                }
+
+                Some(ppi)
+            }
+            None => None,
+        };
+
         let force_to_chroma_quartered = matches.is_present("CHROMA_QUARTERED");
 
         Ok(Config {
@@ -200,6 +224,7 @@ impl Config {
             only_shrink,
             sharpen,
             quality,
+            ppi,
             force_to_chroma_quartered,
         })
     }
@@ -264,6 +289,7 @@ pub fn run(config: Config) -> Result<i32, String> {
             config.only_shrink,
             config.sharpen,
             config.quality,
+            config.ppi,
             config.force_to_chroma_quartered,
             &sc,
             &overwriting,
@@ -282,7 +308,8 @@ pub fn run(config: Config) -> Result<i32, String> {
 
             if let Some(extension) = p.extension() {
                 if let Some(extension) = extension.to_str() {
-                    let mut allow_extensions = vec!["jpg", "jpeg", "png", "webp", "ico", "pgm"];
+                    let mut allow_extensions =
+                        vec!["jpg", "jpeg", "png", "webp", "ico", "pgm", "tif", "tiff"];
 
                     if config.allow_gif {
                         allow_extensions.push("gif");
@@ -316,6 +343,7 @@ pub fn run(config: Config) -> Result<i32, String> {
                     config.only_shrink,
                     config.sharpen,
                     config.quality,
+                    config.ppi,
                     config.force_to_chroma_quartered,
                     &sc,
                     &overwriting,
@@ -339,6 +367,7 @@ pub fn run(config: Config) -> Result<i32, String> {
                 let only_shrink = config.only_shrink;
                 let sharpen = config.sharpen;
                 let quality = config.quality;
+                let ppi = config.ppi;
                 let force_to_chroma_quartered = config.force_to_chroma_quartered;
                 let output_path = match output_path.as_ref() {
                     Some(output_path) => {
@@ -363,6 +392,7 @@ pub fn run(config: Config) -> Result<i32, String> {
                         only_shrink,
                         sharpen,
                         quality,
+                        ppi,
                         force_to_chroma_quartered,
                         &sc,
                         &overwriting,
@@ -391,6 +421,7 @@ fn resizing(
     only_shrink: bool,
     sharpen: bool,
     quality: u8,
+    ppi: Option<f64>,
     force_to_chroma_quartered: bool,
     sc: &Arc<Mutex<Scanner<io::Stdin>>>,
     overwriting: &Arc<Mutex<u8>>,
@@ -421,6 +452,11 @@ fn resizing(
                 }
 
                 config.quality = quality;
+
+                if let Some(ppi) = ppi {
+                    config.ppi = Some((ppi, ppi));
+                }
+
                 config.force_to_chroma_quartered = force_to_chroma_quartered;
 
                 let mut output = ImageResource::from_path(output_path);
@@ -446,9 +482,40 @@ fn resizing(
                     config.sharpen = 0f64;
                 }
 
+                if let Some(ppi) = ppi {
+                    config.ppi = Some((ppi, ppi));
+                }
+
                 let mut output = ImageResource::from_path(output_path);
 
                 to_png(&mut output, &input_image_resource, &config)
+                    .map_err(|err| err.to_string())?;
+
+                print_resized_message(output_path)?;
+            }
+        }
+        "TIFF" => {
+            if let Some(output_path) =
+                get_output_path(force, sc, overwriting, input_path, output_path)?
+            {
+                let mut config = TIFFConfig::new();
+
+                config.remain_profile = remain_profile;
+                config.width = side_maximum;
+                config.height = side_maximum;
+                config.shrink_only = only_shrink;
+
+                if !sharpen {
+                    config.sharpen = 0f64;
+                }
+
+                if let Some(ppi) = ppi {
+                    config.ppi = Some((ppi, ppi));
+                }
+
+                let mut output = ImageResource::from_path(output_path);
+
+                to_tiff(&mut output, &input_image_resource, &config)
                     .map_err(|err| err.to_string())?;
 
                 print_resized_message(output_path)?;
