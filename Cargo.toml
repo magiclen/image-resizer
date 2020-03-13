@@ -1,10 +1,10 @@
 [package]
 name = "image-resizer"
-version = "0.2.1"
+version = "0.2.2"
 authors = ["Magic Len <len@magiclen.org>"]
 edition = "2018"
-repository = "https://github.com/magiclen/xcompress"
-homepage = "https://magiclen.org/xcompress"
+repository = "https://github.com/magiclen/image-resizer"
+homepage = "https://magiclen.org/image-resizer"
 keywords = ["image", "resize", "shrink", "sharpen"]
 categories = ["command-line-utilities"]
 description= "Resize or just shrink images and sharpen them appropriately."
