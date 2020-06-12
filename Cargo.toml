@@ -1,6 +1,6 @@
 [package]
 name = "image-resizer"
-version = "0.2.2"
+version = "0.2.3"
 authors = ["Magic Len <len@magiclen.org>"]
 edition = "2018"
 repository = "https://github.com/magiclen/image-resizer"
@@ -19,13 +19,19 @@ branch = "master"
 panic = "abort"
 
 [dependencies]
-clap = "2.33.0"
+clap = "2.33.1"
+concat-with = "0.2"
+terminal_size = "0.1"
+
 image-convert = "0.9.5"
 num_cpus = "1.10.0"
-terminal_size = "0.1"
-path-absolutize = "1.1.3"
-scanner-rust = "1.0.6"
+scanner-rust = "2.0.8"
 starts-ends-with-caseless = "0.5"
-walkdir = "2"
 pathdiff = "0.1.0"
 threadpool = "1.7.1"
+
+walkdir = "2.3.1"
+
+[dependencies.path-absolutize]
+version = "2"
+features = ["lazy_static_cache"]
