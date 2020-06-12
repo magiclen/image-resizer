@@ -40,7 +40,7 @@ fn main() -> Result<(), String> {
         .set_term_width(terminal_size().map(|(width, _)| width.0 as usize).unwrap_or(0))
         .version(CARGO_PKG_VERSION)
         .author(CARGO_PKG_AUTHORS)
-        .about(concat!("It helps you generate favicons with different formats and sizes.\n\nEXAMPLES:\n", concat_line!(prefix "image-resizer ",
+        .about(concat!("Resize or just shrink images and sharpen them appropriately.\n\nEXAMPLES:\n", concat_line!(prefix "image-resizer ",
                 "/path/to/image -m 1920                         # Make /path/to/image resized",
                 "/path/to/folder -m 1920                        # Make images inside /path/to/folder and make resized",
                 "/path/to/image -o /path/to/image2 -m 1920      # Make /path/to/image resized, and save it to /path/to/image2",
