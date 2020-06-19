@@ -14,6 +14,7 @@ extern crate walkdir;
 
 extern crate image_convert;
 
+use std::error::Error;
 use std::fs;
 use std::io::{self, Write};
 use std::path::Path;
@@ -35,7 +36,7 @@ const APP_NAME: &str = "Image Resizer";
 const CARGO_PKG_VERSION: &str = env!("CARGO_PKG_VERSION");
 const CARGO_PKG_AUTHORS: &str = env!("CARGO_PKG_AUTHORS");
 
-fn main() -> Result<(), String> {
+fn main() -> Result<(), Box<dyn Error>> {
     let matches = App::new(APP_NAME)
         .set_term_width(terminal_size().map(|(width, _)| width.0 as usize).unwrap_or(0))
         .version(CARGO_PKG_VERSION)
@@ -136,24 +137,26 @@ fn main() -> Result<(), String> {
         .value_of("SIDE_MAXIMUM")
         .unwrap()
         .parse::<u16>()
-        .map_err(|_| String::from("You need to input a valid maximum for image sides."))?;
+        .map_err(|_| "You need to input a valid maximum for image sides.")?;
 
-    let quality = matches.value_of("QUALITY").unwrap().parse::<u8>().map_err(|_| {
-        String::from("You need to input a valid quality value for lossy-compressed images.")
-    })?;
+    let quality = matches
+        .value_of("QUALITY")
+        .unwrap()
+        .parse::<u8>()
+        .map_err(|_| "You need to input a valid quality value for lossy-compressed images.")?;
 
     if quality > 100 {
-        return Err(String::from("The range of quality is from 0 to 100."));
+        return Err("The range of quality is from 0 to 100.".into());
     }
 
     let ppi = match matches.value_of("PPI") {
         Some(ppi) => {
             let ppi = ppi.parse::<f64>().map_err(|_| {
-                String::from("You need to input a valid quality value for pixels per inch (ppi).")
+                "You need to input a valid quality value for pixels per inch (ppi)."
             })?;
 
             if ppi <= 0f64 {
-                return Err(String::from("The ppi must be bigger than 0."));
+                return Err("The ppi must be bigger than 0.".into());
             }
 
             Some(ppi)
@@ -163,7 +166,7 @@ fn main() -> Result<(), String> {
 
     let input_path = Path::new(input);
 
-    let is_dir = input_path.metadata().map_err(|err| err.to_string())?.is_dir();
+    let is_dir = input_path.metadata()?.is_dir();
 
     let output_path = match output {
         Some(output) => {
@@ -177,15 +180,13 @@ fn main() -> Result<(), String> {
                         } else {
                             return Err(format!(
                                 "`{}` is not a directory.",
-                                output_path
-                                    .absolutize()
-                                    .map_err(|err| err.to_string())?
-                                    .to_string_lossy()
-                            ));
+                                output_path.absolutize()?.to_string_lossy()
+                            )
+                            .into());
                         }
                     }
                     Err(_) => {
-                        fs::create_dir_all(output_path).map_err(|err| err.to_string())?;
+                        fs::create_dir_all(output_path)?;
 
                         Some(output_path)
                     }
@@ -193,8 +194,9 @@ fn main() -> Result<(), String> {
             } else if output_path.is_dir() {
                 return Err(format!(
                     "`{}` is not a file.",
-                    output_path.absolutize().map_err(|err| err.to_string())?.to_string_lossy()
-                ));
+                    output_path.absolutize()?.to_string_lossy()
+                )
+                .into());
             } else {
                 Some(output_path)
             }
@@ -209,7 +211,7 @@ fn main() -> Result<(), String> {
         let mut image_paths = Vec::new();
 
         for dir_entry in WalkDir::new(&input_path).into_iter().filter_map(|e| e.ok()) {
-            if !dir_entry.metadata().map_err(|err| err.to_string())?.is_file() {
+            if !dir_entry.metadata()?.is_file() {
                 continue;
             }
 
@@ -259,7 +261,7 @@ fn main() -> Result<(), String> {
                     output_path.as_deref(),
                 ) {
                     eprintln!("{}", err);
-                    io::stderr().flush().map_err(|err| err.to_string())?;
+                    io::stderr().flush()?;
                 }
             }
         } else {
@@ -341,13 +343,12 @@ fn resizing(
     overwriting: &Arc<Mutex<u8>>,
     input_path: &Path,
     output_path: Option<&Path>,
-) -> Result<(), String> {
+) -> Result<(), Box<dyn Error>> {
     let mut output = None;
 
     let input_image_resource = image_convert::ImageResource::from_path(&input_path);
 
-    let input_identify = image_convert::identify(&mut output, &input_image_resource)
-        .map_err(|err| err.to_string())?;
+    let input_identify = image_convert::identify(&mut output, &input_image_resource)?;
 
     match input_identify.format.as_str() {
         "JPEG" => {
@@ -375,8 +376,7 @@ fn resizing(
 
                 let mut output = image_convert::ImageResource::from_path(output_path);
 
-                image_convert::to_jpg(&mut output, &input_image_resource, &config)
-                    .map_err(|err| err.to_string())?;
+                image_convert::to_jpg(&mut output, &input_image_resource, &config)?;
 
                 print_resized_message(output_path)?;
             }
@@ -402,8 +402,7 @@ fn resizing(
 
                 let mut output = image_convert::ImageResource::from_path(output_path);
 
-                image_convert::to_png(&mut output, &input_image_resource, &config)
-                    .map_err(|err| err.to_string())?;
+                image_convert::to_png(&mut output, &input_image_resource, &config)?;
 
                 print_resized_message(output_path)?;
             }
@@ -429,8 +428,7 @@ fn resizing(
 
                 let mut output = image_convert::ImageResource::from_path(output_path);
 
-                image_convert::to_tiff(&mut output, &input_image_resource, &config)
-                    .map_err(|err| err.to_string())?;
+                image_convert::to_tiff(&mut output, &input_image_resource, &config)?;
 
                 print_resized_message(output_path)?;
             }
@@ -454,8 +452,7 @@ fn resizing(
 
                 let mut output = image_convert::ImageResource::from_path(output_path);
 
-                image_convert::to_webp(&mut output, &input_image_resource, &config)
-                    .map_err(|err| err.to_string())?;
+                image_convert::to_webp(&mut output, &input_image_resource, &config)?;
 
                 print_resized_message(output_path)?;
             }
@@ -477,8 +474,7 @@ fn resizing(
 
                 let mut output = image_convert::ImageResource::from_path(output_path);
 
-                image_convert::to_pgm(&mut output, &input_image_resource, &config)
-                    .map_err(|err| err.to_string())?;
+                image_convert::to_pgm(&mut output, &input_image_resource, &config)?;
 
                 print_resized_message(output_path)?;
             }
@@ -501,8 +497,7 @@ fn resizing(
 
                     let mut output = image_convert::ImageResource::from_path(output_path);
 
-                    image_convert::to_gif(&mut output, &input_image_resource, &config)
-                        .map_err(|err| err.to_string())?;
+                    image_convert::to_gif(&mut output, &input_image_resource, &config)?;
 
                     print_resized_message(output_path)?;
                 }
@@ -520,7 +515,7 @@ fn get_output_path<'a>(
     overwriting: &Arc<Mutex<u8>>,
     input_path: &'a Path,
     output_path: Option<&'a Path>,
-) -> Result<Option<&'a Path>, String> {
+) -> Result<Option<&'a Path>, Box<dyn Error>> {
     match output_path {
         Some(output_path) => {
             if output_path.exists() {
@@ -534,14 +529,10 @@ fn get_output_path<'a>(
                             "`{}` exists, do you want to overwrite it? [y/n] ",
                             output_path_string
                         );
-                        io::stdout().flush().map_err(|_| "Cannot flush stdout.".to_string())?;
+                        io::stdout().flush()?;
 
-                        let token = sc
-                            .lock()
-                            .unwrap()
-                            .next()
-                            .map_err(|_| "Cannot read from stdin.".to_string())?
-                            .ok_or_else(|| "Read EOF.".to_string())?;
+                        let token =
+                            sc.lock().unwrap().next()?.ok_or_else(|| "Read EOF.".to_string())?;
 
                         if token.starts_with_caseless_ascii("y") {
                             break true;
@@ -557,7 +548,7 @@ fn get_output_path<'a>(
                     }
                 }
             } else {
-                fs::create_dir_all(output_path.parent().unwrap()).map_err(|err| err.to_string())?;
+                fs::create_dir_all(output_path.parent().unwrap())?;
             }
 
             Ok(Some(output_path))
@@ -567,7 +558,7 @@ fn get_output_path<'a>(
 }
 
 #[inline]
-fn print_resized_message(output_path: &Path) -> Result<(), String> {
+fn print_resized_message(output_path: &Path) -> Result<(), io::Error> {
     println!("`{}` has been resized.", output_path.to_string_lossy());
-    io::stdout().flush().map_err(|_| "Cannot flush stdout.".to_string())
+    io::stdout().flush()
 }
