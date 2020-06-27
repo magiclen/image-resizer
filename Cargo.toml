@@ -10,6 +10,7 @@ categories = ["command-line-utilities"]
 description= "Resize or just shrink images and sharpen them appropriately."
 readme = "README.md"
 license = "MIT"
+include = ["src/**/*", "Cargo.toml"]
 
 [badges.travis-ci]
 repository = "magiclen/image-resizer"
