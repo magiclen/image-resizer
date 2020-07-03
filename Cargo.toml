@@ -27,7 +27,7 @@ terminal_size = "0.1"
 image-convert = "0.9.5"
 num_cpus = "1.10.0"
 scanner-rust = "2.0.8"
-starts-ends-with-caseless = "0.5"
+starts-ends-with-caseless = "0.6"
 pathdiff = "0.1.0"
 threadpool = "1.7.1"
 
