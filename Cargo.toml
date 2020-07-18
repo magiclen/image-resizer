@@ -1,6 +1,6 @@
 [package]
 name = "image-resizer"
-version = "0.2.5"
+version = "0.2.6"
 authors = ["Magic Len <len@magiclen.org>"]
 edition = "2018"
 repository = "https://github.com/magiclen/image-resizer"
@@ -27,7 +27,7 @@ terminal_size = "0.1"
 image-convert = "0.9.5"
 num_cpus = "1.10.0"
 scanner-rust = "2.0.8"
-starts-ends-with-caseless = "0.6"
+str-utils = "0.1"
 pathdiff = "0.1.0"
 threadpool = "1.7.1"
 

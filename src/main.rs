@@ -4,7 +4,7 @@ extern crate clap;
 extern crate terminal_size;
 
 extern crate path_absolutize;
-extern crate starts_ends_with_caseless;
+extern crate str_utils;
 
 extern crate scanner_rust;
 
@@ -24,7 +24,7 @@ use clap::{App, Arg};
 use terminal_size::terminal_size;
 
 use path_absolutize::Absolutize;
-use starts_ends_with_caseless::{StartsWithCaseless, StartsWithCaselessMultiple};
+use str_utils::{StartsWithIgnoreAsciiCase, EqIgnoreAsciiCaseMultiple};
 
 use scanner_rust::generic_array::typenum::U8;
 use scanner_rust::Scanner;
@@ -225,7 +225,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                         allow_extensions.push("gif");
                     }
 
-                    if extension.starts_with_caseless_ascii_multiple(&allow_extensions).is_some() {
+                    if extension.eq_ignore_ascii_case_with_lowercase_multiple(&allow_extensions).is_some() {
                         image_paths.push(p);
                     }
                 }
@@ -534,9 +534,9 @@ fn get_output_path<'a>(
                         let token =
                             sc.lock().unwrap().next()?.ok_or_else(|| "Read EOF.".to_string())?;
 
-                        if token.starts_with_caseless_ascii("y") {
+                        if token.starts_with_ignore_ascii_case_with_lowercase("y") {
                             break true;
-                        } else if token.starts_with_caseless_ascii("n") {
+                        } else if token.starts_with_ignore_ascii_case_with_lowercase("n") {
                             break false;
                         }
                     };
