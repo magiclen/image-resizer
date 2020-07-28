@@ -1,22 +1,24 @@
 [package]
 name = "image-resizer"
-version = "0.2.6"
+version = "0.2.7"
 authors = ["Magic Len <len@magiclen.org>"]
 edition = "2018"
 repository = "https://github.com/magiclen/image-resizer"
 homepage = "https://magiclen.org/image-resizer"
 keywords = ["image", "resize", "shrink", "sharpen"]
 categories = ["command-line-utilities"]
-description= "Resize or just shrink images and sharpen them appropriately."
+description = "Resize or just shrink images and sharpen them appropriately."
 readme = "README.md"
 license = "MIT"
-include = ["src/**/*", "Cargo.toml"]
+include = ["src/**/*", "Cargo.toml", "README.md", "LICENSE"]
 
 [badges.travis-ci]
 repository = "magiclen/image-resizer"
 branch = "master"
 
 [profile.release]
+lto = true
+codegen-units = 1
 panic = "abort"
 
 [dependencies]
