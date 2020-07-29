@@ -10,7 +10,7 @@ all: ./target/release/image-resizer
 install:
 	$(MAKE)
 	sudo cp ./target/release/image-resizer /usr/local/bin/image-resizer
-	sudo chown root. /usr/local/bin/image-resizer
+	sudo chown root: /usr/local/bin/image-resizer
 	sudo chmod 0755 /usr/local/bin/image-resizer
 	
 test:
