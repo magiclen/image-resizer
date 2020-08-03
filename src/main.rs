@@ -24,7 +24,7 @@ use clap::{App, Arg};
 use terminal_size::terminal_size;
 
 use path_absolutize::Absolutize;
-use str_utils::{StartsWithIgnoreAsciiCase, EqIgnoreAsciiCaseMultiple};
+use str_utils::{EqIgnoreAsciiCaseMultiple, StartsWithIgnoreAsciiCase};
 
 use scanner_rust::generic_array::typenum::U8;
 use scanner_rust::Scanner;
@@ -225,7 +225,10 @@ fn main() -> Result<(), Box<dyn Error>> {
                         allow_extensions.push("gif");
                     }
 
-                    if extension.eq_ignore_ascii_case_with_lowercase_multiple(&allow_extensions).is_some() {
+                    if extension
+                        .eq_ignore_ascii_case_with_lowercase_multiple(&allow_extensions)
+                        .is_some()
+                    {
                         image_paths.push(p);
                     }
                 }
@@ -522,12 +525,10 @@ fn get_output_path<'a>(
                 if !force {
                     let mutex_guard = overwriting.lock().unwrap();
 
-                    let output_path_string = output_path.to_string_lossy();
-
                     let allow_overwrite = loop {
                         print!(
                             "`{}` exists, do you want to overwrite it? [y/n] ",
-                            output_path_string
+                            output_path.absolutize()?.to_string_lossy()
                         );
                         io::stdout().flush()?;
 
@@ -559,6 +560,6 @@ fn get_output_path<'a>(
 
 #[inline]
 fn print_resized_message(output_path: &Path) -> Result<(), io::Error> {
-    println!("`{}` has been resized.", output_path.to_string_lossy());
+    println!("`{}` has been resized.", output_path.absolutize()?.to_string_lossy());
     io::stdout().flush()
 }
