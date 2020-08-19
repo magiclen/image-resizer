@@ -30,7 +30,7 @@ image-convert = "0.10"
 num_cpus = "1.10.0"
 scanner-rust = "2.0.8"
 str-utils = "0.1"
-pathdiff = "0.1.0"
+pathdiff = "0.2"
 threadpool = "1.7.1"
 
 walkdir = "2.3.1"
