@@ -1,7 +1,7 @@
 Image Resizer
 ====================
 
-[![Build Status](https://travis-ci.org/magiclen/image-resizer.svg?branch=master)](https://travis-ci.org/magiclen/image-resizer)
+[![CI](https://github.com/magiclen/image-resizer/actions/workflows/ci.yml/badge.svg)](https://github.com/magiclen/image-resizer/actions/workflows/ci.yml)
 
 Resize or just shrink images and sharpen them appropriately.
 

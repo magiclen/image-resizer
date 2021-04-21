@@ -1,6 +1,6 @@
 [package]
 name = "image-resizer"
-version = "0.2.8"
+version = "0.2.9"
 authors = ["Magic Len <len@magiclen.org>"]
 edition = "2018"
 repository = "https://github.com/magiclen/image-resizer"
@@ -11,10 +11,6 @@ description = "Resize or just shrink images and sharpen them appropriately."
 readme = "README.md"
 license = "MIT"
 include = ["src/**/*", "Cargo.toml", "README.md", "LICENSE"]
-
-[badges.travis-ci]
-repository = "magiclen/image-resizer"
-branch = "master"
 
 [profile.release]
 lto = true
