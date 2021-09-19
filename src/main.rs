@@ -323,7 +323,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             force_to_chroma_quartered,
             &sc,
             &overwriting,
-            &input_path,
+            input_path,
             output_path,
         )?;
     }
