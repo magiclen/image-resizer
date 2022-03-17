@@ -1,27 +1,13 @@
-#[macro_use]
-extern crate concat_with;
-extern crate clap;
-extern crate terminal_size;
-
-extern crate path_absolutize;
-extern crate str_utils;
-
-extern crate scanner_rust;
-
-extern crate num_cpus;
-extern crate threadpool;
-extern crate walkdir;
-
-extern crate image_convert;
-
 use std::error::Error;
 use std::fs;
 use std::io::{self, Write};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-use clap::{App, Arg};
+use clap::{Arg, Command};
 use terminal_size::terminal_size;
+
+use concat_with::concat_line;
 
 use path_absolutize::Absolutize;
 use str_utils::{EqIgnoreAsciiCaseMultiple, StartsWithIgnoreAsciiCase};
@@ -37,8 +23,8 @@ const CARGO_PKG_VERSION: &str = env!("CARGO_PKG_VERSION");
 const CARGO_PKG_AUTHORS: &str = env!("CARGO_PKG_AUTHORS");
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let matches = App::new(APP_NAME)
-        .set_term_width(terminal_size().map(|(width, _)| width.0 as usize).unwrap_or(0))
+    let matches = Command::new(APP_NAME)
+        .term_width(terminal_size().map(|(width, _)| width.0 as usize).unwrap_or(0))
         .version(CARGO_PKG_VERSION)
         .author(CARGO_PKG_AUTHORS)
         .about(concat!("Resize or just shrink images and sharpen them appropriately.\n\nEXAMPLES:\n", concat_line!(prefix "image-resizer ",
@@ -54,70 +40,70 @@ fn main() -> Result<(), Box<dyn Error>> {
                 "/path/to/image -m 1920 --no-sharpen            # Make /path/to/image resized without auto sharpening",
                 "/path/to/image -m 1920 --ppi 150               # Make /path/to/image resized, and set their PPI to 150",
             )))
-        .arg(Arg::with_name("INPUT_PATH")
+        .arg(Arg::new("INPUT_PATH")
             .required(true)
-            .help("Assigns an image or a directory for image resizing. It should be a path of a file or a directory")
+            .help("Assign an image or a directory for image resizing. It should be a path of a file or a directory")
             .takes_value(true)
         )
-        .arg(Arg::with_name("OUTPUT_PATH")
+        .arg(Arg::new("OUTPUT_PATH")
             .required(false)
             .long("output")
-            .short("o")
-            .help("Assigns a destination of your generated files. It should be a path of a directory or a file depending on your input path")
+            .short('o')
+            .help("Assign a destination of your generated files. It should be a path of a directory or a file depending on your input path")
             .takes_value(true)
         )
-        .arg(Arg::with_name("SINGLE_THREAD")
+        .arg(Arg::new("SINGLE_THREAD")
             .long("single-thread")
-            .short("s")
-            .help("Uses only one thread")
+            .short('s')
+            .help("Use only one thread")
         )
-        .arg(Arg::with_name("FORCE")
+        .arg(Arg::new("FORCE")
             .long("force")
-            .short("f")
-            .help("Forces to overwrite files")
+            .short('f')
+            .help("Force to overwrite files")
         )
-        .arg(Arg::with_name("ALLOW_GIF")
+        .arg(Arg::new("ALLOW_GIF")
             .long("allow-gif")
-            .help("Allows to do GIF resizing")
+            .help("Allow to do GIF resizing")
         )
-        .arg(Arg::with_name("REMAIN_PROFILE")
+        .arg(Arg::new("REMAIN_PROFILE")
             .long("remain-profile")
-            .short("r")
-            .help("Remains the profiles of all images")
+            .short('r')
+            .help("Remain the profiles of all images")
         )
-        .arg(Arg::with_name("SIDE_MAXIMUM")
+        .arg(Arg::new("SIDE_MAXIMUM")
             .long("side-maximum")
             .visible_aliases(&["max"])
-            .short("m")
+            .short('m')
             .takes_value(true)
             .required(true)
-            .help("Sets the maximum pixels of each side of an image (Aspect ratio will be preserved)")
+            .help("Set the maximum pixels of each side of an image (Aspect ratio will be preserved)")
         )
-        .arg(Arg::with_name("ONLY_SHRINK")
+        .arg(Arg::new("ONLY_SHRINK")
             .visible_aliases(&["shrink"])
             .long("only-shrink")
             .help("Only shrink images, not enlarge them")
         )
-        .arg(Arg::with_name("NO_SHARPEN")
+        .arg(Arg::new("NO_SHARPEN")
             .long("no-sharpen")
-            .help("Disables automatically sharpening")
+            .help("Disable automatically sharpening")
         )
-        .arg(Arg::with_name("QUALITY")
+        .arg(Arg::new("QUALITY")
             .long("quality")
-            .short("q")
+            .short('q')
             .takes_value(true)
             .default_value("92")
-            .help("Sets the quality for lossy compression")
+            .help("Set the quality for lossy compression")
         )
-        .arg(Arg::with_name("PPI")
+        .arg(Arg::new("PPI")
             .long("ppi")
             .takes_value(true)
-            .help("Sets pixels per inch (ppi)")
+            .help("Set pixels per inch (ppi)")
         )
-        .arg(Arg::with_name("CHROMA_QUARTERED")
+        .arg(Arg::new("CHROMA_QUARTERED")
             .long("chroma-quartered")
             .visible_aliases(&["4:2:0"])
-            .help("Uses 4:2:0 (chroma quartered) subsampling to reduce the file size if it is supported")
+            .help("Use 4:2:0 (chroma quartered) subsampling to reduce the file size if it is supported")
         )
         .after_help("Enjoy it! https://magiclen.org")
         .get_matches();
