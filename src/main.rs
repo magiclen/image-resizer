@@ -516,8 +516,11 @@ fn get_output_path<'a>(
                         );
                         io::stdout().flush()?;
 
-                        let token =
-                            sc.lock().unwrap().next()?.ok_or_else(|| "Read EOF.".to_string())?;
+                        let token = {
+                            let s = sc.lock().unwrap().next()?;
+
+                            s.ok_or_else(|| "Read EOF.".to_string())?
+                        };
 
                         if token.starts_with_ignore_ascii_case_with_lowercase("y") {
                             break true;
