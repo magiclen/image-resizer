@@ -333,11 +333,9 @@ fn resizing(
     input_path: &Path,
     output_path: Option<&Path>,
 ) -> Result<(), Box<dyn Error>> {
-    let mut output = None;
-
     let input_image_resource = image_convert::ImageResource::from_path(&input_path);
 
-    let input_identify = image_convert::identify(&mut output, &input_image_resource)?;
+    let input_identify = image_convert::identify_ping(&input_image_resource)?;
 
     match input_identify.format.as_str() {
         "JPEG" => {
