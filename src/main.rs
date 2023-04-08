@@ -1,20 +1,17 @@
-use std::error::Error;
-use std::fs;
-use std::io::{self, Write};
-use std::path::Path;
-use std::sync::{Arc, Mutex};
+use std::{
+    error::Error,
+    fs,
+    io::{self, Write},
+    path::Path,
+    sync::{Arc, Mutex},
+};
 
 use clap::{Arg, Command};
-use terminal_size::terminal_size;
-
 use concat_with::concat_line;
-
 use path_absolutize::Absolutize;
+use scanner_rust::{generic_array::typenum::U8, Scanner};
 use str_utils::{EqIgnoreAsciiCaseMultiple, StartsWithIgnoreAsciiCase};
-
-use scanner_rust::generic_array::typenum::U8;
-use scanner_rust::Scanner;
-
+use terminal_size::terminal_size;
 use threadpool::ThreadPool;
 use walkdir::WalkDir;
 
@@ -146,7 +143,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
 
             Some(ppi)
-        }
+        },
         None => None,
     };
 
@@ -170,12 +167,12 @@ fn main() -> Result<(), Box<dyn Error>> {
                             )
                             .into());
                         }
-                    }
+                    },
                     Err(_) => {
                         fs::create_dir_all(output_path)?;
 
                         Some(output_path)
-                    }
+                    },
                 }
             } else if output_path.is_dir() {
                 return Err(format!(
@@ -186,7 +183,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             } else {
                 Some(output_path)
             }
-        }
+        },
         None => None,
     };
 
@@ -230,7 +227,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                         let output_path = output_path.join(p);
 
                         Some(output_path)
-                    }
+                    },
                     None => None,
                 };
 
@@ -268,7 +265,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                         let output_path = output_path.join(p);
 
                         Some(output_path)
-                    }
+                    },
                     None => None,
                 };
 
@@ -367,7 +364,7 @@ fn resizing(
 
                 print_resized_message(output_path)?;
             }
-        }
+        },
         "PNG" => {
             if let Some(output_path) =
                 get_output_path(force, sc, overwriting, input_path, output_path)?
@@ -393,7 +390,7 @@ fn resizing(
 
                 print_resized_message(output_path)?;
             }
-        }
+        },
         "TIFF" => {
             if let Some(output_path) =
                 get_output_path(force, sc, overwriting, input_path, output_path)?
@@ -419,7 +416,7 @@ fn resizing(
 
                 print_resized_message(output_path)?;
             }
-        }
+        },
         "WEBP" => {
             if let Some(output_path) =
                 get_output_path(force, sc, overwriting, input_path, output_path)?
@@ -443,7 +440,7 @@ fn resizing(
 
                 print_resized_message(output_path)?;
             }
-        }
+        },
         "PGM" => {
             if let Some(output_path) =
                 get_output_path(force, sc, overwriting, input_path, output_path)?
@@ -465,7 +462,7 @@ fn resizing(
 
                 print_resized_message(output_path)?;
             }
-        }
+        },
         "GIF" => {
             if allow_gif {
                 if let Some(output_path) =
@@ -489,7 +486,7 @@ fn resizing(
                     print_resized_message(output_path)?;
                 }
             }
-        }
+        },
         _ => (),
     }
 
@@ -540,7 +537,7 @@ fn get_output_path<'a>(
             }
 
             Ok(Some(output_path))
-        }
+        },
         None => Ok(Some(input_path)),
     }
 }
