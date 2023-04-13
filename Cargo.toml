@@ -9,7 +9,6 @@ homepage = "https://magiclen.org/image-resizer"
 keywords = ["image", "resize", "shrink", "sharpen"]
 categories = ["command-line-utilities"]
 description = "Resize or just shrink images and sharpen them appropriately."
-readme = "README.md"
 license = "MIT"
 include = ["src/**/*", "Cargo.toml", "README.md", "LICENSE"]
 
