@@ -1,9 +1,9 @@
 [package]
 name = "image-resizer"
-version = "0.2.14"
+version = "0.2.15"
 authors = ["Magic Len <len@magiclen.org>"]
 edition = "2021"
-rust-version = "1.59"
+rust-version = "1.64"
 repository = "https://github.com/magiclen/image-resizer"
 homepage = "https://magiclen.org/image-resizer"
 keywords = ["image", "resize", "shrink", "sharpen"]
@@ -23,7 +23,7 @@ clap = "3.2.23"
 concat-with = "0.2"
 terminal_size = "0.2"
 
-image-convert = "0.13"
+image-convert = "0.15"
 num_cpus = "1.10.0"
 scanner-rust = "2.0.8"
 str-utils = "0.1"
