@@ -1,6 +1,6 @@
 [package]
 name = "image-resizer"
-version = "0.2.16"
+version = "0.2.17"
 authors = ["Magic Len <len@magiclen.org>"]
 edition = "2021"
 rust-version = "1.70"
