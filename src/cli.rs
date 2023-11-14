@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use clap::{error::ErrorKind, CommandFactory, FromArgMatches, Parser};
+use clap::{CommandFactory, FromArgMatches, Parser};
 use concat_with::concat_line;
 use terminal_size::terminal_size;
 
@@ -13,17 +13,17 @@ const AFTER_HELP: &str = "Enjoy it! https://magiclen.org";
 const APP_ABOUT: &str = concat!(
     "It helps you interlace an image or multiple images for web-page usage.\n\nEXAMPLES:\n",
     concat_line!(prefix "image-resizer ",
-                "/path/to/image -m 1920                           # Make /path/to/image resized",
-                "/path/to/folder -m 1920                          # Make images inside /path/to/folder and make resized",
-                "/path/to/image -o /path/to/image2 -m 1920        # Make /path/to/image resized, and save it to /path/to/image2",
-                "/path/to/folder -o /path/to/folder2 -m 1920      # Make images inside /path/to/folder resized, and save them to /path/to/folder2",
-                "/path/to/folder -o /path/to/folder2 -f -m 1920   # Make images inside /path/to/folder resized, and save them to /path/to/folder2 without overwriting checks",
-                "/path/to/folder --allow-gif -r -m 1920           # Make images inside /path/to/folder including GIF resized and also remain their profiles",
-                "/path/to/image -m 1920 --shrink                  # Make /path/to/image shrunk if it needs to be",
-                "/path/to/image -m 1920 -q 75                     # Make /path/to/image resized with a quality of 75 if it uses lossy compression",
-                "/path/to/image -m 1920 --4:2:0                   # Make /path/to/image resized and output using 4:2:0 (chroma quartered) subsampling to reduce the file size",
-                "/path/to/image -m 1920 --no-sharpen              # Make /path/to/image resized without auto sharpening",
-                "/path/to/image -m 1920 --ppi 150                 # Make /path/to/image resized, and set their PPI to 150",
+        "/path/to/image -m 1920                           # Make /path/to/image resized",
+        "/path/to/folder -m 1920                          # Make images inside /path/to/folder and make resized",
+        "/path/to/image -o /path/to/image2 -m 1920        # Make /path/to/image resized, and save it to /path/to/image2",
+        "/path/to/folder -o /path/to/folder2 -m 1920      # Make images inside /path/to/folder resized, and save them to /path/to/folder2",
+        "/path/to/folder -o /path/to/folder2 -f -m 1920   # Make images inside /path/to/folder resized, and save them to /path/to/folder2 without overwriting checks",
+        "/path/to/folder --allow-gif -r -m 1920           # Make images inside /path/to/folder including GIF resized and also remain their profiles",
+        "/path/to/image -m 1920 --shrink                  # Make /path/to/image shrunk if it needs to be",
+        "/path/to/image -m 1920 -q 75                     # Make /path/to/image resized with a quality of 75 if it uses lossy compression",
+        "/path/to/image -m 1920 --4:2:0                   # Make /path/to/image resized and output using 4:2:0 (chroma quartered) subsampling to reduce the file size",
+        "/path/to/image -m 1920 --no-sharpen              # Make /path/to/image resized without auto sharpening",
+        "/path/to/image -m 1920 --ppi 150                 # Make /path/to/image resized, and set their PPI to 150",
     )
 );
 
@@ -72,12 +72,23 @@ pub struct CLIArgs {
     #[arg(help = "Set the quality for lossy compression")]
     pub quality:          u8,
     #[arg(long)]
+    #[arg(value_parser = parse_ppi)]
     #[arg(help = "Set pixels per inch (ppi)")]
     pub ppi:              Option<f64>,
     #[arg(long, visible_alias = "4:2:0")]
     #[arg(help = "Use 4:2:0 (chroma quartered) subsampling to reduce the file size if it is \
                   supported")]
     pub chroma_quartered: bool,
+}
+
+fn parse_ppi(arg: &str) -> Result<f64, String> {
+    let ppi = arg.parse::<f64>().map_err(|err| err.to_string())?;
+
+    if ppi <= 0f64 {
+        return Err("PPI must be bigger than 0".into());
+    }
+
+    Ok(ppi)
 }
 
 pub fn get_args() -> CLIArgs {
@@ -90,16 +101,7 @@ pub fn get_args() -> CLIArgs {
     let matches = args.get_matches();
 
     match CLIArgs::from_arg_matches(&matches) {
-        Ok(args) => {
-            if let Some(ppi) = args.ppi {
-                if ppi <= 0f64 {
-                    let mut cmd = CLIArgs::command();
-                    cmd.error(ErrorKind::InvalidValue, "PPI must be bigger than 0").exit();
-                }
-            }
-
-            args
-        },
+        Ok(args) => args,
         Err(err) => {
             err.exit();
         },
