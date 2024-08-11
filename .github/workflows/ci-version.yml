@@ -15,7 +15,7 @@ jobs:
       matrix:
         os:
           - ubuntu-latest
-          - macos-latest
+          # - macos-latest # jpeg will break things
         toolchain:
           - stable
           - nightly
@@ -57,9 +57,9 @@ jobs:
       matrix:
         os:
           - ubuntu-latest
-          - macos-latest
+          # - macos-latest # jpeg will break things
         toolchain:
-          - "1.70"
+          - "1.74"
         features:
           -
     name: Test ${{ matrix.toolchain }} on ${{ matrix.os }} (${{ matrix.features }})

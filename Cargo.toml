@@ -3,7 +3,7 @@ name = "image-resizer"
 version = "0.2.18"
 authors = ["Magic Len <len@magiclen.org>"]
 edition = "2021"
-rust-version = "1.70"
+rust-version = "1.74"
 repository = "https://github.com/magiclen/image-resizer"
 homepage = "https://magiclen.org/image-resizer"
 keywords = ["image", "resize", "shrink", "sharpen"]
@@ -25,7 +25,7 @@ terminal_size = "0.3"
 
 anyhow = "1"
 
-image-convert = "0.15"
+image-convert = "0.17"
 num_cpus = "1"
 scanner-rust = "2"
 str-utils = "0.1"
