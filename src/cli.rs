@@ -11,19 +11,19 @@ const CARGO_PKG_AUTHORS: &str = env!("CARGO_PKG_AUTHORS");
 const AFTER_HELP: &str = "Enjoy it! https://magiclen.org";
 
 const APP_ABOUT: &str = concat!(
-    "It helps you interlace an image or multiple images for web-page usage.\n\nEXAMPLES:\n",
+    "Resize or just shrink images and sharpen them appropriately.\n\nEXAMPLES:\n",
     concat_line!(prefix "image-resizer ",
-        "/path/to/image -m 1920                           # Make /path/to/image resized",
-        "/path/to/folder -m 1920                          # Make images inside /path/to/folder and make resized",
-        "/path/to/image -o /path/to/image2 -m 1920        # Make /path/to/image resized, and save it to /path/to/image2",
-        "/path/to/folder -o /path/to/folder2 -m 1920      # Make images inside /path/to/folder resized, and save them to /path/to/folder2",
-        "/path/to/folder -o /path/to/folder2 -f -m 1920   # Make images inside /path/to/folder resized, and save them to /path/to/folder2 without overwriting checks",
-        "/path/to/folder --allow-gif -r -m 1920           # Make images inside /path/to/folder including GIF resized and also remain their profiles",
-        "/path/to/image -m 1920 --shrink                  # Make /path/to/image shrunk if it needs to be",
-        "/path/to/image -m 1920 -q 75                     # Make /path/to/image resized with a quality of 75 if it uses lossy compression",
-        "/path/to/image -m 1920 --4:2:0                   # Make /path/to/image resized and output using 4:2:0 (chroma quartered) subsampling to reduce the file size",
-        "/path/to/image -m 1920 --no-sharpen              # Make /path/to/image resized without auto sharpening",
-        "/path/to/image -m 1920 --ppi 150                 # Make /path/to/image resized, and set their PPI to 150",
+        "/path/to/image -m 1920                           # Resize /path/to/image",
+        "/path/to/folder -m 1920                          # Resize the images inside /path/to/folder",
+        "/path/to/image -o /path/to/image2 -m 1920        # Resize /path/to/image, and save it to /path/to/image2",
+        "/path/to/folder -o /path/to/folder2 -m 1920      # Resize the images inside /path/to/folder, and save them to /path/to/folder2",
+        "/path/to/folder -o /path/to/folder2 -f -m 1920   # Resize the images inside /path/to/folder, and save them to /path/to/folder2 without overwriting checks",
+        "/path/to/folder --allow-gif -r -m 1920           # Resize the images inside /path/to/folder including GIF images and also remain their metadata",
+        "/path/to/image -m 1920 --shrink                  # Resize /path/to/image only if it is bigger than 1920",
+        "/path/to/image -m 1920 -q 75                     # Resize /path/to/image with a quality of 75 if it uses lossy compression",
+        "/path/to/image -m 1920 --4:2:0                   # Resize /path/to/image and output it with 4:2:0 (chroma quartered) subsampling to reduce the file size",
+        "/path/to/image -m 1920 --no-sharpen              # Resize /path/to/image without auto sharpening",
+        "/path/to/image -m 1920 --ppi 150                 # Resize /path/to/image, and set its PPI to 150",
     )
 );
 
@@ -50,16 +50,16 @@ pub struct CLIArgs {
     #[arg(help = "Force to overwrite files")]
     pub force:            bool,
     #[arg(long)]
-    #[arg(help = "Allow to do GIF interlacing")]
+    #[arg(help = "Allow to do GIF resizing")]
     pub allow_gif:        bool,
-    #[arg(short, long)]
-    #[arg(help = "Remain the profiles of all images")]
-    pub remain_profile:   bool,
+    #[arg(short, long, visible_alias = "remain-profile")]
+    #[arg(help = "Remain the metadata of all images")]
+    pub remain_metadata:  bool,
     #[arg(short = 'm', long, visible_alias = "max")]
     #[arg(
         help = "Set the maximum pixels of each side of an image (Aspect ratio will be preserved)"
     )]
-    pub side_maximum:     u16,
+    pub side_maximum:     u32,
     #[arg(long, visible_alias = "shrink")]
     #[arg(help = "Only shrink images, not enlarge them")]
     pub only_shrink:      bool,
@@ -67,13 +67,13 @@ pub struct CLIArgs {
     #[arg(help = "Disable automatically sharpening")]
     pub no_sharpen:       bool,
     #[arg(short, long)]
-    #[arg(default_value = "92")]
-    #[arg(value_parser = clap::value_parser!(u8).range(0..=100))]
-    #[arg(help = "Set the quality for lossy compression")]
-    pub quality:          u8,
+    #[arg(value_parser = clap::value_parser!(u8).range(1..=100))]
+    #[arg(help = "Set the quality for lossy compression. The quality of the input image is kept \
+                  when it is not set")]
+    pub quality:          Option<u8>,
     #[arg(long)]
     #[arg(value_parser = parse_ppi)]
-    #[arg(help = "Set pixels per inch (ppi)")]
+    #[arg(help = "Set pixels per inch (ppi) if it is supported")]
     pub ppi:              Option<f64>,
     #[arg(long, visible_alias = "4:2:0")]
     #[arg(help = "Use 4:2:0 (chroma quartered) subsampling to reduce the file size if it is \
