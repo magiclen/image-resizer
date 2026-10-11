@@ -1,10 +1,11 @@
 mod cli;
+mod files;
+mod inspect;
 
 use std::{
     fmt, fs, io,
     io::Write,
     path::{Path, PathBuf},
-    process,
     sync::{
         Arc, Mutex,
         atomic::{AtomicUsize, Ordering},
@@ -14,6 +15,8 @@ use std::{
 
 use anyhow::{Context, anyhow};
 use cli::*;
+use files::{excluded_output_root, write_atomically};
+use inspect::goals_match;
 use threadpool::ThreadPool;
 use walkdir::WalkDir;
 
@@ -127,6 +130,12 @@ fn main() -> anyhow::Result<()> {
         }
     }
 
+    let excluded_output = if is_dir {
+        excluded_output_root(input_path.as_path(), output_path.as_deref())?
+    } else {
+        None
+    };
+
     // ImageMagick has to be initialized once before any wand is used. Doing it here keeps it on the main thread and lets the thread limit below apply to a ready environment.
     image_convert::start_call_once();
 
@@ -134,34 +143,13 @@ fn main() -> anyhow::Result<()> {
     let error_count = Arc::new(AtomicUsize::new(0));
 
     if is_dir {
-        let mut image_paths = Vec::new();
-
-        for dir_entry in WalkDir::new(input_path.as_path()) {
-            let dir_entry = match dir_entry {
-                Ok(dir_entry) => dir_entry,
-                Err(error) => {
-                    // Dropping the entry silently would hide a whole unreadable subtree and still report success.
-                    report_error(&console_lock, &anyhow::Error::new(error));
-                    error_count.fetch_add(1, Ordering::Relaxed);
-
-                    continue;
-                },
-            };
-
-            // `file_type` reuses what the directory listing already reported, so it costs no syscall.
-            // A symlink either duplicates a file which is walked on its own or points outside the requested tree, and neither is this program's business.
-            if !dir_entry.file_type().is_file() {
-                continue;
-            }
-
-            let p = dir_entry.into_path();
-
-            if let Some(extension) = p.extension().and_then(|extension| extension.to_str()) {
-                if is_allowed_extension(extension, allow_gif) {
-                    image_paths.push(p);
-                }
-            }
-        }
+        let image_paths = collect_image_paths(
+            input_path.as_path(),
+            excluded_output.as_deref(),
+            allow_gif,
+            &console_lock,
+            &error_count,
+        );
 
         if single_thread {
             for image_path in image_paths {
@@ -179,7 +167,7 @@ fn main() -> anyhow::Result<()> {
 
             limit_magick_threads()?;
 
-            // ImageMagick parallelizes each operation internally, so one worker per core keeps the throughput while holding far fewer decoded images at once.
+            // ImageMagick uses one thread per operation here, so one worker per core limits the number of decoded images held at once.
             let pool = ThreadPool::new(cpus);
 
             // Every job reads the same two roots, so they are shared instead of being copied into each of them.
@@ -218,6 +206,48 @@ fn main() -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+/// Walks the input directory and collects the files which have an allowed extension. The output subtree is skipped, so the files written by an earlier run are not handled again.
+fn collect_image_paths(
+    input_root: &Path,
+    excluded_output: Option<&Path>,
+    allow_gif: bool,
+    console_lock: &Mutex<()>,
+    error_count: &AtomicUsize,
+) -> Vec<PathBuf> {
+    let mut image_paths = Vec::new();
+
+    for dir_entry in WalkDir::new(input_root).into_iter().filter_entry(|entry| {
+        excluded_output.is_none_or(|output| !entry.path().starts_with(output))
+    }) {
+        let dir_entry = match dir_entry {
+            Ok(dir_entry) => dir_entry,
+            Err(error) => {
+                // Dropping the entry silently would hide a whole unreadable subtree and still report success.
+                report_error(console_lock, &anyhow::Error::new(error));
+                error_count.fetch_add(1, Ordering::Relaxed);
+
+                continue;
+            },
+        };
+
+        // `file_type` reuses what the directory listing already reported, so it costs no syscall.
+        // A symlink either duplicates a file which is walked on its own or points outside the requested tree, and neither is this program's business.
+        if !dir_entry.file_type().is_file() {
+            continue;
+        }
+
+        let p = dir_entry.into_path();
+
+        if let Some(extension) = p.extension().and_then(|extension| extension.to_str()) {
+            if is_allowed_extension(extension, allow_gif) {
+                image_paths.push(p);
+            }
+        }
+    }
+
+    image_paths
 }
 
 /// Resizes one image of a directory tree. A failure is reported and counted instead of being returned, because bailing out would leave the remaining images unhandled and the thread pool holding jobs which nothing waits for.
@@ -303,39 +333,6 @@ fn confirm_overwrite(console_lock: &Mutex<()>, output_path: &Path) -> anyhow::Re
             return Ok(overwrite);
         }
     }
-}
-
-/// Writes data through a sibling temporary file and renames it into place, so an interrupted write cannot destroy the original image.
-fn write_atomically(output_path: &Path, data: &[u8]) -> anyhow::Result<()> {
-    let mut temp_path = output_path.as_os_str().to_os_string();
-
-    temp_path.push(format!(".{}.tmp", process::id()));
-
-    let temp_path = PathBuf::from(temp_path);
-
-    let permissions = match fs::symlink_metadata(output_path) {
-        // The rename below would replace the link itself rather than write through it. Callers are expected to have settled this already, so this is the last-line guard.
-        Ok(metadata) if metadata.file_type().is_symlink() => {
-            return Err(anyhow!("{output_path:?} is a symbolic link."));
-        },
-        Ok(metadata) => Some(metadata.permissions()),
-        Err(error) if error.kind() == io::ErrorKind::NotFound => None,
-        Err(error) => return Err(error).with_context(|| anyhow!("{output_path:?}")),
-    };
-
-    let result = fs::write(temp_path.as_path(), data)
-        .and_then(|_| match permissions {
-            Some(permissions) => fs::set_permissions(temp_path.as_path(), permissions),
-            None => Ok(()),
-        })
-        .and_then(|_| fs::rename(temp_path.as_path(), output_path));
-
-    if result.is_err() {
-        // A half-written temporary file is useless and would only litter the output directory.
-        let _ = fs::remove_file(temp_path.as_path());
-    }
-
-    result.with_context(|| anyhow!("{temp_path:?}"))
 }
 
 /// Encodes an image again in its own format, resized to fit into a square of `side_maximum` pixels. The aspect ratio is preserved by `image-convert`, which computes the output size per frame.
@@ -461,10 +458,10 @@ fn resizing(
     }
 
     if input_identify.has_unreadable_frames {
-        // ImageMagick reads the first frame of such an image only, so writing it back would throw the animation away for good.
+        // The ping reads only the default PNG image, so encoding it would discard the APNG animation.
         report_message(
             console_lock,
-            format_args!("{input_path:?} holds an animation which ImageMagick cannot read."),
+            format_args!("{input_path:?} is an APNG animation and is skipped."),
         );
 
         return Ok(());
@@ -497,6 +494,27 @@ fn resizing(
         None => input_path,
     };
 
+    let input_data =
+        input_image_resource.as_u8_slice().expect("the input resource is created as data");
+
+    if goals_match(input_data, input_identify.format.as_str(), flags) {
+        let same_path = match (output_path.canonicalize(), input_path.canonicalize()) {
+            (Ok(output), Ok(input)) => output == input,
+            _ => false,
+        };
+
+        if !same_path {
+            write_atomically(output_path, input_data)?;
+        }
+
+        report_message(
+            console_lock,
+            format_args!("{output_path:?} already meets the image options."),
+        );
+
+        return Ok(());
+    }
+
     let mut output_image_resource = image_convert::ImageResource::Data(Vec::new());
 
     encode_resized(
@@ -528,7 +546,7 @@ fn resizing(
 
 #[cfg(test)]
 mod tests {
-    use std::env;
+    use std::{env, process};
 
     use super::*;
 
@@ -542,6 +560,13 @@ mod tests {
         0xF5, 0xA8, 0x8F, 0xE1, 0x0D, 0x81, 0x4F, 0x9F, 0x3E, 0x0D, 0x8C, 0xC5, 0xFF, 0xFF, 0xFF,
         0x1F, 0x10, 0x8B, 0x01, 0x3F, 0x29, 0x08, 0xC3, 0x35, 0xAE, 0x74, 0xF7, 0x00, 0x00, 0x00,
         0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+    ];
+
+    // An EXIF profile which only holds the RightTop orientation, so the image has to be turned clockwise.
+    const EXIF_RIGHT_TOP: [u8; 32] = [
+        0x45, 0x78, 0x69, 0x66, 0x00, 0x00, 0x49, 0x49, 0x2A, 0x00, 0x08, 0x00, 0x00, 0x00, 0x01,
+        0x00, 0x12, 0x01, 0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00,
     ];
 
     /// A directory under the system temporary directory which removes itself when it goes out of scope.
@@ -661,6 +686,29 @@ mod tests {
         assert_eq!(b"resized".to_vec(), fs::read(output_path.as_path()).unwrap());
     }
 
+    #[test]
+    fn walking_skips_the_existing_output_subtree() {
+        let temp_dir = TempDir::new();
+        let output_path = temp_dir.join("output");
+
+        fs::create_dir(&output_path).unwrap();
+        fs::write(temp_dir.join("input.png"), b"input").unwrap();
+        fs::write(output_path.join("previous.png"), b"previous output").unwrap();
+
+        let excluded = excluded_output_root(&temp_dir.0, Some(&output_path)).unwrap();
+        let image_paths = collect_image_paths(
+            &temp_dir.0,
+            excluded.as_deref(),
+            false,
+            &Mutex::new(()),
+            &AtomicUsize::new(0),
+        );
+
+        assert_eq!(vec![temp_dir.join("input.png")], image_paths);
+        assert_eq!(None, excluded_output_root(&temp_dir.0, Some(&temp_dir.0)).unwrap());
+        assert!(excluded_output_root(&output_path, Some(&temp_dir.0)).is_err());
+    }
+
     #[cfg(unix)]
     #[test]
     fn write_atomically_keeps_the_mode_of_the_replaced_file() {
@@ -712,5 +760,305 @@ mod tests {
         // The longer side is scaled down to the maximum, and the aspect ratio decides the other one.
         assert_eq!(10, identify.resolution.width);
         assert_eq!(5, identify.resolution.height);
+    }
+
+    fn resize_flags(side_maximum: u32) -> Flags {
+        Flags {
+            allow_gif: false,
+            remain_metadata: false,
+            force: true,
+            side_maximum,
+            only_shrink: true,
+            sharpen: true,
+            quality: None,
+            ppi: None,
+            chroma_quartered: false,
+        }
+    }
+
+    #[test]
+    fn only_shrink_keeps_a_matching_image_unchanged() {
+        let temp_dir = TempDir::new();
+        let input_path = temp_dir.join("gradient.png");
+
+        fs::write(&input_path, GRADIENT_PNG).unwrap();
+        resizing(resize_flags(100), &Mutex::new(()), &input_path, None).unwrap();
+
+        assert_eq!(GRADIENT_PNG.to_vec(), fs::read(&input_path).unwrap());
+    }
+
+    #[test]
+    fn only_shrink_copies_a_matching_image_to_the_output() {
+        let temp_dir = TempDir::new();
+        let input_path = temp_dir.join("gradient.png");
+        let output_path = temp_dir.join("output/gradient.png");
+
+        fs::write(&input_path, GRADIENT_PNG).unwrap();
+        resizing(resize_flags(100), &Mutex::new(()), &input_path, Some(&output_path)).unwrap();
+
+        assert_eq!(GRADIENT_PNG.to_vec(), fs::read(&input_path).unwrap());
+        assert_eq!(GRADIENT_PNG.to_vec(), fs::read(&output_path).unwrap());
+    }
+
+    #[test]
+    fn only_shrink_removes_metadata_from_a_small_image() {
+        image_convert::start_call_once();
+
+        let temp_dir = TempDir::new();
+        let input_path = temp_dir.join("comment.png");
+        let wand = image_convert::magick_rust::MagickWand::new();
+
+        wand.read_image_blob(GRADIENT_PNG).unwrap();
+        wand.set_image_property("comment", "Original comment").unwrap();
+
+        let original = wand.write_image_blob("PNG").unwrap();
+
+        fs::write(&input_path, &original).unwrap();
+        resizing(resize_flags(100), &Mutex::new(()), &input_path, None).unwrap();
+
+        let output = fs::read(&input_path).unwrap();
+        let result = image_convert::magick_rust::MagickWand::new();
+
+        result.read_image_blob(&output).unwrap();
+
+        assert_ne!(original, output);
+        assert!(result.get_image_property("comment").is_err());
+        assert_eq!(40, result.get_image_width());
+        assert_eq!(20, result.get_image_height());
+    }
+
+    #[test]
+    fn only_shrink_removes_metadata_from_a_small_webp() {
+        image_convert::start_call_once();
+
+        let temp_dir = TempDir::new();
+        let input_path = temp_dir.join("oriented.webp");
+        let mut wand = image_convert::magick_rust::MagickWand::new();
+
+        wand.read_image_blob(GRADIENT_PNG).unwrap();
+        wand.set_image_orientation(image_convert::magick_rust::OrientationType::RightTop).unwrap();
+        wand.profile_image("exif", EXIF_RIGHT_TOP.as_slice()).unwrap();
+
+        let original = wand.write_image_blob("WEBP").unwrap();
+
+        // Writing the EXIF chunk needs ImageMagick with webpmux.
+        assert!(original.windows(4).any(|window| window == b"EXIF"));
+
+        fs::write(&input_path, &original).unwrap();
+        resizing(resize_flags(100), &Mutex::new(()), &input_path, None).unwrap();
+
+        let output = fs::read(&input_path).unwrap();
+        let identify =
+            image_convert::identify_ping(&image_convert::ImageResource::Data(output.clone()))
+                .unwrap();
+
+        assert!(!output.windows(4).any(|window| window == b"EXIF"));
+        assert_eq!(20, identify.resolution.width);
+        assert_eq!(40, identify.resolution.height);
+
+        resizing(resize_flags(100), &Mutex::new(()), &input_path, None).unwrap();
+
+        assert_eq!(output, fs::read(&input_path).unwrap());
+    }
+
+    #[test]
+    fn only_shrink_updates_jpeg_quality_and_sampling() {
+        image_convert::start_call_once();
+
+        let temp_dir = TempDir::new();
+        let input_path = temp_dir.join("color.jpg");
+        let wand = image_convert::magick_rust::MagickWand::new();
+        let mut color = image_convert::magick_rust::PixelWand::new();
+
+        color.set_color("red").unwrap();
+        wand.new_image(40, 20, &color).unwrap();
+
+        let mut config = image_convert::JPGConfig::new();
+
+        config.quality = Some(90);
+        config.force_to_chroma_quartered = false;
+        config.sharpen = 0.0;
+
+        let mut original = image_convert::ImageResource::Data(Vec::new());
+
+        image_convert::to_jpg(
+            &mut original,
+            &image_convert::ImageResource::MagickWand(wand),
+            &config,
+        )
+        .unwrap();
+        fs::write(&input_path, original.into_vec().unwrap()).unwrap();
+
+        let mut flags = resize_flags(100);
+
+        flags.quality = Some(75);
+        flags.chroma_quartered = true;
+
+        resizing(flags, &Mutex::new(()), &input_path, None).unwrap();
+
+        let output = fs::read(&input_path).unwrap();
+        let result = image_convert::magick_rust::MagickWand::new();
+
+        result.ping_image_blob(&output).unwrap();
+
+        assert_eq!(75, result.get_image_compression_quality());
+        assert_eq!("2x2,1x1,1x1", result.get_image_property("jpeg:sampling-factor").unwrap());
+
+        resizing(flags, &Mutex::new(()), &input_path, None).unwrap();
+
+        assert_eq!(output, fs::read(&input_path).unwrap());
+    }
+
+    #[test]
+    fn png_ppi_is_written_when_metadata_is_removed() {
+        let temp_dir = TempDir::new();
+        let input_path = temp_dir.join("gradient.png");
+        let mut flags = resize_flags(100);
+
+        flags.ppi = Some(150.0);
+        fs::write(&input_path, GRADIENT_PNG).unwrap();
+        resizing(flags, &Mutex::new(()), &input_path, None).unwrap();
+
+        let output = fs::read(&input_path).unwrap();
+        let identify =
+            image_convert::identify_ping(&image_convert::ImageResource::Data(output.clone()))
+                .unwrap();
+
+        // PNG stores whole pixels per meter, so its PPI has a small rounding error.
+        assert!((150.0 - identify.ppi.0).abs() < 0.0254);
+        assert!((150.0 - identify.ppi.1).abs() < 0.0254);
+        assert_eq!(40, identify.resolution.width);
+        assert_eq!(20, identify.resolution.height);
+
+        resizing(flags, &Mutex::new(()), &input_path, None).unwrap();
+
+        assert_eq!(output, fs::read(&input_path).unwrap());
+    }
+
+    #[test]
+    fn only_shrink_applies_orientation_when_metadata_is_kept() {
+        image_convert::start_call_once();
+
+        let temp_dir = TempDir::new();
+        let input_path = temp_dir.join("oriented.tif");
+        let mut wand = image_convert::magick_rust::MagickWand::new();
+
+        wand.read_image_blob(GRADIENT_PNG).unwrap();
+        wand.set_image_orientation(image_convert::magick_rust::OrientationType::RightTop).unwrap();
+        fs::write(&input_path, wand.write_image_blob("TIFF").unwrap()).unwrap();
+
+        let mut flags = resize_flags(100);
+
+        flags.remain_metadata = true;
+
+        resizing(flags, &Mutex::new(()), &input_path, None).unwrap();
+
+        let output = fs::read(&input_path).unwrap();
+        let result = image_convert::magick_rust::MagickWand::new();
+
+        result.ping_image_blob(output).unwrap();
+
+        assert_eq!(20, result.get_image_width());
+        assert_eq!(40, result.get_image_height());
+        assert_eq!(
+            image_convert::magick_rust::OrientationType::TopLeft,
+            result.get_image_orientation()
+        );
+    }
+
+    #[test]
+    fn only_shrink_checks_every_tiff_page() {
+        image_convert::start_call_once();
+
+        let temp_dir = TempDir::new();
+        let input_path = temp_dir.join("pages.tif");
+        let mut first = image_convert::magick_rust::MagickWand::new();
+        let second = image_convert::magick_rust::MagickWand::new();
+        let mut color = image_convert::magick_rust::PixelWand::new();
+
+        color.set_color("red").unwrap();
+        first.new_image(40, 20, &color).unwrap();
+        second.new_image(80, 40, &color).unwrap();
+        first.add_image(&second).unwrap();
+
+        let mut input = image_convert::ImageResource::Data(Vec::new());
+        let mut config = image_convert::TIFFConfig::new();
+
+        config.sharpen = 0.0;
+
+        image_convert::to_tiff(
+            &mut input,
+            &image_convert::ImageResource::MagickWand(first),
+            &config,
+        )
+        .unwrap();
+        fs::write(&input_path, input.into_vec().unwrap()).unwrap();
+
+        let mut flags = resize_flags(50);
+
+        flags.remain_metadata = true;
+
+        resizing(flags, &Mutex::new(()), &input_path, None).unwrap();
+
+        let result = image_convert::magick_rust::MagickWand::new();
+
+        result.ping_image_blob(fs::read(&input_path).unwrap()).unwrap();
+
+        let pages = result.images();
+
+        assert_eq!(2, pages.count());
+        assert_eq!(40, pages.get(0).unwrap().get_image_width());
+        assert_eq!(20, pages.get(0).unwrap().get_image_height());
+        assert_eq!(50, pages.get(1).unwrap().get_image_width());
+        assert_eq!(25, pages.get(1).unwrap().get_image_height());
+    }
+
+    #[test]
+    fn only_shrink_uses_the_gif_canvas_size() {
+        image_convert::start_call_once();
+
+        let temp_dir = TempDir::new();
+        let input_path = temp_dir.join("patches.gif");
+        let mut first = image_convert::magick_rust::MagickWand::new();
+        let second = image_convert::magick_rust::MagickWand::new();
+        let mut color = image_convert::magick_rust::PixelWand::new();
+
+        color.set_color("red").unwrap();
+        first.new_image(2, 2, &color).unwrap();
+        first.reset_image_page("8x8+0+0").unwrap();
+        color.set_color("blue").unwrap();
+        second.new_image(2, 2, &color).unwrap();
+        second.reset_image_page("8x8+4+4").unwrap();
+        first.add_image(&second).unwrap();
+
+        let mut input = image_convert::ImageResource::Data(Vec::new());
+        let mut config = image_convert::GIFConfig::new();
+
+        config.sharpen = 0.0;
+        config.strip_metadata = false;
+
+        image_convert::to_gif(
+            &mut input,
+            &image_convert::ImageResource::MagickWand(first),
+            &config,
+        )
+        .unwrap();
+        fs::write(&input_path, input.into_vec().unwrap()).unwrap();
+
+        let mut flags = resize_flags(4);
+
+        flags.allow_gif = true;
+        flags.remain_metadata = true;
+
+        resizing(flags, &Mutex::new(()), &input_path, None).unwrap();
+
+        let identify = image_convert::identify_ping(&image_convert::ImageResource::Data(
+            fs::read(&input_path).unwrap(),
+        ))
+        .unwrap();
+
+        assert_eq!(2, identify.number_of_frames);
+        assert_eq!(4, identify.resolution.width);
+        assert_eq!(4, identify.resolution.height);
     }
 }

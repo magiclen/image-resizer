@@ -19,7 +19,7 @@ const APP_ABOUT: &str = concat!(
         "/path/to/folder -o /path/to/folder2 -m 1920      # Resize the images inside /path/to/folder, and save them to /path/to/folder2",
         "/path/to/folder -o /path/to/folder2 -f -m 1920   # Resize the images inside /path/to/folder, and save them to /path/to/folder2 without overwriting checks",
         "/path/to/folder --allow-gif -r -m 1920           # Resize the images inside /path/to/folder including GIF images and also remain their metadata",
-        "/path/to/image -m 1920 --shrink                  # Resize /path/to/image only if it is bigger than 1920",
+        "/path/to/image -m 1920 --shrink                  # Shrink /path/to/image to fit 1920 without enlarging it",
         "/path/to/image -m 1920 -q 75                     # Resize /path/to/image with a quality of 75 if it uses lossy compression",
         "/path/to/image -m 1920 --4:2:0                   # Resize /path/to/image and output it with 4:2:0 (chroma quartered) subsampling to reduce the file size",
         "/path/to/image -m 1920 --no-sharpen              # Resize /path/to/image without auto sharpening",
@@ -44,7 +44,7 @@ pub struct CLIArgs {
                   directory or a file depending on your input path")]
     pub output_path:      Option<PathBuf>,
     #[arg(short, long)]
-    #[arg(help = "Use only one thread")]
+    #[arg(help = "Process one image at a time; ImageMagick may use multiple threads")]
     pub single_thread:    bool,
     #[arg(short, long)]
     #[arg(help = "Force to overwrite files")]
@@ -68,8 +68,8 @@ pub struct CLIArgs {
     pub no_sharpen:       bool,
     #[arg(short, long)]
     #[arg(value_parser = clap::value_parser!(u8).range(1..=100))]
-    #[arg(help = "Set the quality for lossy compression. The quality of the input image is kept \
-                  when it is not set")]
+    #[arg(help = "Set the quality for lossy compression. JPEG keeps its input quality by \
+                  default; WebP uses the encoder default")]
     pub quality:          Option<u8>,
     #[arg(long)]
     #[arg(value_parser = parse_ppi)]
@@ -84,8 +84,8 @@ pub struct CLIArgs {
 fn parse_ppi(arg: &str) -> Result<f64, String> {
     let ppi = arg.parse::<f64>().map_err(|err| err.to_string())?;
 
-    if ppi <= 0f64 {
-        return Err("PPI must be bigger than 0".into());
+    if !ppi.is_finite() || ppi <= 0f64 {
+        return Err("PPI must be finite and bigger than 0".into());
     }
 
     Ok(ppi)

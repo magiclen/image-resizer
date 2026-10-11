@@ -27,7 +27,7 @@ jobs:
       - name: Install ImageMagick (Linux)
         run: |
           sudo apt update
-          sudo apt install librsvg2-dev libwebp-dev
+          sudo apt install liblcms2-dev librsvg2-dev libwebp-dev
           wget https://download.imagemagick.org/archive/ImageMagick.tar.gz
           tar xf ImageMagick.tar.gz
           cd ImageMagick-*
@@ -71,7 +71,7 @@ jobs:
       - name: Install ImageMagick (Linux)
         run: |
           sudo apt update
-          sudo apt install librsvg2-dev libwebp-dev
+          sudo apt install liblcms2-dev librsvg2-dev libwebp-dev
           wget https://download.imagemagick.org/archive/ImageMagick.tar.gz
           tar xf ImageMagick.tar.gz
           cd ImageMagick-*

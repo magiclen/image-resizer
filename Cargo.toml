@@ -25,7 +25,7 @@ terminal_size = "0.4"
 
 anyhow = "1"
 
-image-convert = "0.22"
+image-convert = "0.25.1"
 threadpool = "1"
 
 walkdir = "2"
