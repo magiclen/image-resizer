@@ -24,6 +24,18 @@ const ALLOW_EXTENSIONS: [&str; 7] = ["jpg", "jpeg", "png", "webp", "tif", "tiff"
 const ALLOW_EXTENSIONS_WITH_GIF: [&str; 8] =
     ["jpg", "jpeg", "png", "webp", "tif", "tiff", "pgm", "gif"];
 
+// TIFF reads these text fields into properties, but its writer expects artifacts.
+const TIFF_TEXT_PROPERTIES: [&str; 8] = [
+    "tiff:artist",
+    "tiff:copyright",
+    "tiff:timestamp",
+    "tiff:document",
+    "tiff:hostcomputer",
+    "tiff:make",
+    "tiff:model",
+    "tiff:software",
+];
+
 /// The options which decide how an image is resized.
 #[derive(Debug, Clone, Copy)]
 struct Flags {
@@ -173,22 +185,32 @@ fn main() -> anyhow::Result<()> {
             // Every job reads the same two roots, so they are shared instead of being copied into each of them.
             let input_root: Arc<Path> = Arc::from(input_path.as_path());
             let output_root: Option<Arc<Path>> = output_path.as_deref().map(Arc::from);
+            let image_paths = Arc::new(Mutex::new(image_paths.into_iter()));
 
-            for image_path in image_paths {
+            for _ in 0..cpus {
                 let console_lock = console_lock.clone();
                 let error_count = error_count.clone();
                 let input_root = input_root.clone();
                 let output_root = output_root.clone();
+                let image_paths = image_paths.clone();
 
                 pool.execute(move || {
-                    resize_entry(
-                        flags,
-                        &console_lock,
-                        &error_count,
-                        &input_root,
-                        output_root.as_deref(),
-                        image_path.as_path(),
-                    );
+                    loop {
+                        // Release the path lock before processing the image.
+                        let image_path = image_paths.lock().unwrap().next();
+                        let Some(image_path) = image_path else {
+                            break;
+                        };
+
+                        resize_entry(
+                            flags,
+                            &console_lock,
+                            &error_count,
+                            &input_root,
+                            output_root.as_deref(),
+                            image_path.as_path(),
+                        );
+                    }
                 });
             }
 
@@ -335,6 +357,28 @@ fn confirm_overwrite(console_lock: &Mutex<()>, output_path: &Path) -> anyhow::Re
     }
 }
 
+fn read_tiff_with_text_metadata(
+    input: &image_convert::ImageResource,
+) -> Result<image_convert::ImageResource, image_convert::MagickError> {
+    let mut wand = None;
+
+    image_convert::identify_read(&mut wand, input)?;
+
+    let mut wand = wand.expect("identify_read returns a wand on success");
+
+    wand.images_mut().try_for_each(|_, mut page| {
+        for name in TIFF_TEXT_PROPERTIES {
+            if let Ok(value) = page.get_image_property(name) {
+                page.set_image_artifact(name, &value)?;
+            }
+        }
+
+        Ok(())
+    })?;
+
+    Ok(image_convert::ImageResource::MagickWand(wand))
+}
+
 /// Encodes an image again in its own format, resized to fit into a square of `side_maximum` pixels. The aspect ratio is preserved by `image-convert`, which computes the output size per frame.
 fn encode_resized(
     output: &mut image_convert::ImageResource,
@@ -391,7 +435,13 @@ fn encode_resized(
             config.sharpen = sharpen;
             config.ppi = ppi;
 
-            image_convert::to_tiff(output, input, &config)
+            if flags.remain_metadata {
+                let input = read_tiff_with_text_metadata(input)?;
+
+                image_convert::to_tiff(output, &input, &config)
+            } else {
+                image_convert::to_tiff(output, input, &config)
+            }
         },
         "WEBP" => {
             let mut config = image_convert::WEBPConfig::new();
@@ -497,7 +547,14 @@ fn resizing(
     let input_data =
         input_image_resource.as_u8_slice().expect("the input resource is created as data");
 
-    if goals_match(input_data, input_identify.format.as_str(), flags) {
+    // The first ping already proves these single-frame images need resizing.
+    let needs_resize = flags.side_maximum != 0
+        && input_identify.number_of_frames == 1
+        && matches!(input_identify.format.as_str(), "JPEG" | "PNG" | "PGM" | "TIFF")
+        && (input_identify.resolution.width > flags.side_maximum
+            || input_identify.resolution.height > flags.side_maximum);
+
+    if !needs_resize && goals_match(input_data, input_identify.format.as_str(), flags) {
         let same_path = match (output_path.canonicalize(), input_path.canonicalize()) {
             (Ok(output), Ok(input)) => output == input,
             _ => false,
@@ -825,6 +882,92 @@ mod tests {
         assert!(result.get_image_property("comment").is_err());
         assert_eq!(40, result.get_image_width());
         assert_eq!(20, result.get_image_height());
+    }
+
+    #[test]
+    fn only_shrink_removes_text_metadata_from_a_small_tiff() {
+        image_convert::start_call_once();
+
+        let temp_dir = TempDir::new();
+        let input_path = temp_dir.join("text.tif");
+        let mut wand = image_convert::magick_rust::MagickWand::new();
+
+        wand.read_image_blob(GRADIENT_PNG).unwrap();
+        wand.set_image_artifact("tiff:artist", "Original artist").unwrap();
+        wand.set_image_artifact("tiff:copyright", "Original copyright").unwrap();
+
+        let original = wand.write_image_blob("TIFF").unwrap();
+
+        fs::write(&input_path, &original).unwrap();
+        resizing(resize_flags(100), &Mutex::new(()), &input_path, None).unwrap();
+
+        let output = fs::read(&input_path).unwrap();
+        let result = image_convert::magick_rust::MagickWand::new();
+
+        result.ping_image_blob(&output).unwrap();
+
+        assert_ne!(original, output);
+        assert!(result.get_image_property("tiff:artist").is_err());
+        assert!(result.get_image_property("tiff:copyright").is_err());
+        assert_eq!(40, result.get_image_width());
+        assert_eq!(20, result.get_image_height());
+    }
+
+    #[test]
+    fn resizing_keeps_text_metadata_on_every_tiff_page() {
+        image_convert::start_call_once();
+
+        let temp_dir = TempDir::new();
+        let input_path = temp_dir.join("pages.tif");
+        let mut first = image_convert::magick_rust::MagickWand::new();
+        let mut second = image_convert::magick_rust::MagickWand::new();
+
+        first.read_image_blob(GRADIENT_PNG).unwrap();
+        first.set_image_artifact("tiff:artist", "First artist").unwrap();
+        first.set_image_artifact("tiff:copyright", "First copyright").unwrap();
+        second.read_image_blob(GRADIENT_PNG).unwrap();
+        second.set_image_artifact("tiff:artist", "Second artist").unwrap();
+        second.set_image_artifact("tiff:copyright", "Second copyright").unwrap();
+        first.add_image(&second).unwrap();
+
+        let mut input = image_convert::ImageResource::Data(Vec::new());
+        let mut config = image_convert::TIFFConfig::new();
+
+        config.strip_metadata = false;
+        config.sharpen = 0.0;
+
+        image_convert::to_tiff(
+            &mut input,
+            &image_convert::ImageResource::MagickWand(first),
+            &config,
+        )
+        .unwrap();
+        fs::write(&input_path, input.into_vec().unwrap()).unwrap();
+
+        let mut flags = resize_flags(10);
+
+        flags.remain_metadata = true;
+
+        resizing(flags, &Mutex::new(()), &input_path, None).unwrap();
+
+        let result = image_convert::magick_rust::MagickWand::new();
+
+        result.ping_image_blob(fs::read(&input_path).unwrap()).unwrap();
+
+        let pages = result.images();
+
+        assert_eq!(2, pages.count());
+
+        for (index, artist, copyright) in
+            [(0, "First artist", "First copyright"), (1, "Second artist", "Second copyright")]
+        {
+            let page = pages.get(index).unwrap();
+
+            assert_eq!(artist, page.get_image_property("tiff:artist").unwrap());
+            assert_eq!(copyright, page.get_image_property("tiff:copyright").unwrap());
+            assert_eq!(10, page.get_image_width());
+            assert_eq!(5, page.get_image_height());
+        }
     }
 
     #[test]

@@ -5,7 +5,7 @@ use std::{
 
 use image_convert::magick_rust::bindings;
 
-use crate::Flags;
+use crate::{Flags, TIFF_TEXT_PROPERTIES};
 
 struct ImageProbe(NonNull<bindings::MagickWand>);
 
@@ -150,7 +150,14 @@ impl ImageProbe {
 
             // Blob timestamps are added by ImageMagick; stored PNG text is checked in the original chunks.
             if properties.contains(b"comment")
-                || (format == "TIFF" && properties.contains(b"label"))
+                || (format == "TIFF"
+                    && TIFF_TEXT_PROPERTIES
+                        .iter()
+                        .chain(
+                            ["label", "tiff:image-id", "tiff:kodak-33423", "tiff:kodak-36867"]
+                                .iter(),
+                        )
+                        .any(|name| properties.contains(name.as_bytes())))
             {
                 return Some(false);
             }
